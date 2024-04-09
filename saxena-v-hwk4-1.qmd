@@ -1,0 +1,97 @@
+---
+title: "Homework 4"
+author: "Varun Saxena"
+format:
+  pdf:
+    output-file: "saxena-v-hwk4-1"
+    output-ext:  "pdf"
+    header-includes:
+      - \usepackage{float}
+      - \floatplacement{table}{H}
+---
+
+
+```{r}
+#| echo: false
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, ggplot2, dplyr, lubridate, readr, readxl, hrbrthemes, fixest,
+               scales, gganimate, gapminder, gifski, png, tufte, plotly, OECD,
+               ggrepel, survey, foreign, devtools, pdftools, kableExtra, modelsummary,
+               kableExtra)
+
+library(knitr)
+#library(ggbeeswarm)
+```
+
+```{r}
+#| echo: false
+load("Hwk4_workspace.Rdata")
+```
+\newpage
+1.
+```{r}
+#| echo: false
+q1
+```
+\newpage
+2.
+```{r}
+#| echo: false
+q2
+```
+\newpage
+3.
+```{r}
+#| echo: false
+q3
+```
+\newpage
+4.
+```{r}
+#| echo: false
+q4
+```
+\newpage
+5.
+```{r}
+#| echo: false
+kable(q5)
+```
+
+\newpage
+6.
+```{r}
+#| echo: false
+kable(stars_one)
+kable(stars_two)
+```
+
+\newpage
+7.
+```{r}
+#| echo: false
+kable(stars_three)
+kable(stars_four)
+
+```
+
+\newpage
+8.
+```{r}
+#| echo: false
+q8
+```
+
+\newpage
+9.
+```{r}
+#| echo: false
+kable(table_hmo_threshold_1)
+kable(table_partd_threshold_1)
+kable(table_hmo_threshold_2)
+kable(table_partd_threshold_2)
+```
+
+\newpage
+\noindent 10. Based on the results, there seems to be a concentration of enrollments for medium star rating programs. There were few enrollments on the super high and super low end.

@@ -1,0 +1,241 @@
+data <- readRDS("data/output/final_ma_data.rds")
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, ggplot2, dplyr, lubridate, stringr, modelsummary, readxl, data.table, gdata, rddensity, rdd)
+
+library(ggplot2)
+
+data <- data %>% 
+subset(snp == "No" & premium_partc == 0 & (planid < 800 | planid >= 900))
+
+filtered_data <- data %>%
+    group_by(county, year) %>%
+    summarize(planid = n())
+
+q1 <- ggplot(filtered_data, aes(x=as.factor(year), y=planid)) +
+    geom_boxplot() +
+    labs(x="Year", y="Plan Counts", title="Plan Counts by County and Year") +
+    theme_bw()
+
+isoyears_data = data %>%
+    filter(year %in% c(2010, 2012, 2015))
+
+ratings <- isoyears_data %>%
+    group_by(year, Star_Rating) %>%
+    summarize(count = n())
+
+q2 <- ggplot(ratings, aes(x = as.factor(Star_Rating), y = count)) +
+    geom_bar(stat = "identity") +
+    labs(x = "Star Rating", y = "Count", title = "Distribution of Star Ratings in 2010, 2012, and 2015") +
+    theme_bw()
+
+recent_data <- data %>%
+  filter(year >= 2010 & year <= 2015)
+
+average_benchmark_payments <- recent_data %>%
+  group_by(year) %>%
+  summarize(average_benchmark_payment = mean(ma_rate, na.rm = TRUE))
+
+q3<- ggplot(average_benchmark_payments, aes(x = year, y = average_benchmark_payment)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Benchmark Payment from 2010 to 2015",
+       x = "Year",
+       y = "Average Benchmark Payment") +
+  theme_bw()
+
+medrate_data <- recent_data %>%
+  group_by(year) %>%
+  mutate(med_rate = avg_enrollment/avg_eligibles)
+
+q4 <- ggplot(medrate_data, aes(x=as.factor(year), y=med_rate)) +
+    geom_line() +
+    labs(title = "Average Share of Medicare Advantage from 2010 to 2015",
+    x = "Year", y = "Enroll Rate")
+
+ten_data <- data %>%
+    filter(!is.na(avg_enrollment) & year==2010 & !is.na(partc_score))
+
+clean_data <- ten_data %>%
+  mutate(raw_rating=rowMeans(
+    cbind(breastcancer_screen,rectalcancer_screen,cv_cholscreen,diabetes_cholscreen,
+          glaucoma_test,monitoring,flu_vaccine,pn_vaccine,physical_health,
+          mental_health,osteo_test,physical_monitor,primaryaccess,
+          hospital_followup,depression_followup,nodelays,carequickly,
+          overallrating_care,overallrating_plan,calltime,
+          doctor_communicate,customer_service,osteo_manage,
+          diabetes_eye,diabetes_kidney,diabetes_bloodsugar,
+          diabetes_chol,antidepressant,bloodpressure,ra_manage,
+          copd_test,betablocker,bladder,falling,appeals_timely,
+          appeals_review),
+    na.rm=T)) %>%
+  select(contractid, planid, fips, avg_enrollment, state, county, raw_rating, partc_score,
+         avg_eligibles, avg_enrolled, premium_partc, risk_ab, Star_Rating,
+         bid, avg_ffscost, ma_rate)
+
+rv_data <- clean_data %>%
+  select(raw_rating) %>%
+  mutate(star_rating = round(raw_rating * 2) / 2)
+
+q5 <- rv_data %>%
+    group_by(star_rating) %>%
+    summarize(number_of_plans = n())
+
+ma.rd1 <- clean_data %>%
+  filter(Star_Rating==2.5 | Star_Rating==3)
+ma.rd1 <- ma.rd1 %>%
+  mutate(score = raw_rating - 2.75,
+         treat = (score>=0),
+         window1 = (score>=-.125 & score<=.125),
+         mkt_share = avg_enrollment/avg_eligibles,
+         ln_share = log(mkt_share),
+         score_treat=score*treat)
+star25.1 <- lm(mkt_share ~ score + treat, data=ma.rd1)
+star25.2 <- lm(mkt_share ~ score + treat, data= (ma.rd1 %>% filter(window1==TRUE)))
+star25.3 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd1 %>% filter(window1==TRUE)))
+est1 <- as.numeric(star25.1$coef[3])
+est2 <- as.numeric(star25.2$coef[3])
+est3 <- as.numeric(star25.3$coef[3])
+
+rows <- tribble(~term, ~ m1, ~ m2, ~ m3 ,
+                'Bandwidth', "0.25", "0.125", "0.125")
+attr(rows, 'position')  <- 7
+
+modelsummary(list(star25.1, star25.2, star25.3),
+          keep=c("score", "treatTRUE", "score_treat"),
+          coef_map=c("score"="Raw Score", 
+                    "treatTRUE"="Treatment",
+                    "score_treat"="Score x Treat"),
+          gof_map=c("nobs", "r.squared"),
+          add_rows=rows)
+
+bandwidth <- c("0.2",  "0.125", "0.125")
+estimates <- c(est1, est2, est3)
+
+stars_one <- data.frame(bandwidth,estimates)
+
+
+ma.rd2 <- clean_data %>%
+  filter(Star_Rating==3 | Star_Rating==3.5)
+
+ma.rd2 <- ma.rd2 %>%
+  mutate(score = raw_rating - 3.25,
+         treat = (score>=0),
+         window1 = (score>=-.125 & score<=.125),
+         mkt_share = avg_enrollment/avg_eligibles,
+         ln_share = log(mkt_share),
+         score_treat=score*treat)
+star25.1 <- lm(mkt_share ~ score + treat, data=ma.rd1)
+star25.2 <- lm(mkt_share ~ score + treat, data= (ma.rd1 %>% filter(window1==TRUE)))
+star25.3 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd1 %>% filter(window1==TRUE)))
+est1 <- as.numeric(star25.1$coef[3])
+est2 <- as.numeric(star25.2$coef[3])
+est3 <- as.numeric(star25.3$coef[3])
+
+rows <- tribble(~term, ~ m1, ~ m2, ~ m3 ,
+                'Bandwidth', "0.20", "0.125", "0.125")
+attr(rows, 'position')  <- 7
+
+modelsummary(list(star25.1, star25.2, star25.3),
+          keep=c("score", "treatTRUE", "score_treat"),
+          coef_map=c("score"="Raw Score", 
+                    "treatTRUE"="Treatment",
+                    "score_treat"="Score x Treat"),
+          gof_map=c("nobs", "r.squared"),
+          add_rows=rows)
+
+bandwidth <- c("0.2", "0.125", "0.125")
+estimates <- c(est1, est2, est3)
+
+stars_two <- data.frame(bandwidth,estimates)
+
+ma.rd3 <- clean_data %>%
+  filter(Star_Rating==2.5 | Star_Rating==3)%>%
+  mutate(score = raw_rating - 2.75,
+         treat = (score>=0),
+         window2 = (score>=-.1 & score<=.1),
+         window3 = (score>=-.12 & score<=.12),
+         window4 = (score>=-.13 & score<=.13),
+         window5 = (score>=-.14 & score<=.14),
+         window6 = (score>=-.15 & score<=.15),
+         mkt_share = avg_enrollment/avg_eligibles,
+         ln_share = log(mkt_share),
+         score_treat=score*treat)
+star25.2 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd3 %>% filter(window2==TRUE)))
+star25.3 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd3 %>% filter(window3==TRUE)))
+star25.4 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd3 %>% filter(window4==TRUE)))
+star25.5 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd3 %>% filter(window5==TRUE)))
+star25.6 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd3 %>% filter(window6==TRUE)))
+
+est2 <- as.numeric(star25.2$coef[3])
+est3 <- as.numeric(star25.3$coef[3])
+est4 <- as.numeric(star25.4$coef[3])
+est5 <- as.numeric(star25.5$coef[3])
+est5 <- as.numeric(star25.6$coef[3])
+
+bandwidth <- c("0.1", "0.12", "0.13", "0.14", "0.15")
+estimates <- c(est1, est2, est3, est4, est5)
+
+stars_three <- data.frame(bandwidth,estimates)
+stars_three
+
+
+ma.rd4 <- clean_data %>%
+  filter(Star_Rating==3 | Star_Rating==3.5)%>%
+  mutate(score = raw_rating - 3.25,
+         treat = (score>=0),
+         window2 = (score>=-.1 & score<=.1),
+         window3 = (score>=-.12 & score<=.12),
+         window4 = (score>=-.13 & score<=.13),
+         window5 = (score>=-.14 & score<=.14),
+         window6 = (score>=-.15 & score<=.15),
+         mkt_share = avg_enrollment/avg_eligibles,
+         ln_share = log(mkt_share),
+         score_treat=score*treat)
+star35.2 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd4 %>% filter(window2==TRUE)))
+star35.3 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd4 %>% filter(window3==TRUE)))
+star35.4 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd4 %>% filter(window4==TRUE)))
+star35.5 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd4 %>% filter(window5==TRUE)))
+star35.6 <- lm(mkt_share ~ score + treat + score_treat, data= (ma.rd4 %>% filter(window6==TRUE)))
+
+est2 <- as.numeric(star35.2$coef[3])
+est3 <- as.numeric(star35.3$coef[3])
+est4 <- as.numeric(star35.4$coef[3])
+est5 <- as.numeric(star35.5$coef[3])
+est5 <- as.numeric(star35.6$coef[3])
+
+bandwidth <- c("0.1", "0.12", "0.13", "0.14", "0.15")
+estimates <- c(est1, est2, est3, est4, est5)
+
+stars_four <- data.frame(bandwidth,estimates)
+stars_four
+
+q8 <- ggplot(ma.rd1, aes(x=score)) + 
+  geom_bar(width=.025) + theme_bw() +
+  labs(
+    x="Running Variable",
+    y="Number of Plans",
+    title="Distribution of Raw Scores"
+  ) 
+
+threshold_1 <- 2.75  # Threshold for the first comparison (3 vs 2.5)
+threshold_2 <- 3.75  # Threshold for the second comparison (3.5 vs 3)
+
+above_threshold_1 <- subset(data, Star_Rating > threshold_1)
+below_threshold_1 <- subset(data, Star_Rating <= threshold_1)
+
+above_threshold_2 <- subset(data, Star_Rating > threshold_2)
+below_threshold_2 <- subset(data, Star_Rating <= threshold_2)
+
+table_hmo_threshold_1 <- table(mean(above_threshold_1$ssa), mean(below_threshold_1$ssa))
+
+
+table_partd_threshold_1 <- table(mean(above_threshold_1$partd), mean(below_threshold_1$partd))
+
+
+table_hmo_threshold_2 <- table(mean(above_threshold_2$ssa), mean(below_threshold_2$ssa))
+
+
+table_partd_threshold_2 <- table(mean(above_threshold_2$partd), mean(below_threshold_2$partd))
+
+save.image("data/analysis/Hwk4_workspace.Rdata")
